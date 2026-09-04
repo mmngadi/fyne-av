@@ -79,7 +79,7 @@ func moduleDir() (string, error) {
 func main() {
 	tag := os.Getenv("FYNE_AV_LIBS_TAG")
 	if tag == "" {
-		tag = "v0.1.0"
+		tag = "v0.1.1"
 	}
 	base := os.Getenv("FYNE_AV_LIBS_BASE")
 	if base == "" {
