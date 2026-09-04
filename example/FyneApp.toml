@@ -1,0 +1,11 @@
+[Details]
+Icon = "Icon.png"
+Name = "Fyne Video Player"
+ID = "com.example.fyne-av-example"
+Version = "1.0.0"
+Build = 2
+
+[LinuxAndBSD]
+GenericName = "Fyne Video Player"
+Categories = ["Multimedia"]
+ExecParams = "-x 42"

@@ -1,0 +1,7 @@
+.idea/
+dev-env/
+build/ffmpeg/
+libs/
+dist/
+go.work
+go.work.sum
