@@ -1,10 +1,15 @@
 // Command fetch-libs downloads the prebuilt FFmpeg static archives for the
 // current target platform (GOOS/GOARCH) from the fyne-av GitHub Releases and
-// extracts them into libs/ next to this module.
+// extracts them into the fyne-av module's libs/ directory (inside the Go
+// module cache) so that cgo's ${SRCDIR} references resolve at build time.
 //
-// It is invoked by `go generate` via the directive in generate.go:
+// Usage (from your app's module root, after `go get`):
 //
-//	go generate github.com/mmngadi/fyne-av
+//	go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//
+// For cross-compiling, set GOOS/GOARCH first:
+//
+//	GOOS=android GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 //
 // Override the release tag with FYNE_AV_LIBS_TAG (default: v0.1.0) and the
 // base URL with FYNE_AV_LIBS_BASE (default:
@@ -18,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 )
@@ -56,6 +62,20 @@ func assetName(dir string) string {
 	}
 }
 
+// moduleDir returns the on-disk directory of the fyne-av module in the
+// local Go module cache by invoking `go list -m`.
+func moduleDir() (string, error) {
+	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/mmngadi/fyne-av").Output()
+	if err != nil {
+		return "", fmt.Errorf("go list failed: %w (is github.com/mmngadi/fyne-av in your go.mod?)", err)
+	}
+	dir := filepath.Clean(string(out))
+	if dir == "" || dir == "github.com/mmngadi/fyne-av" {
+		return "", fmt.Errorf("could not resolve fyne-av module dir; ensure it is in go.mod and run `go mod download` first")
+	}
+	return dir, nil
+}
+
 func main() {
 	tag := os.Getenv("FYNE_AV_LIBS_TAG")
 	if tag == "" {
@@ -81,23 +101,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Find the module root (parent of cmd/fetch-libs).
-	libsRoot, err := filepath.Abs(filepath.Join(filepath.Dir(os.Args[0]), "..", "..", "libs"))
+	modDir, err := moduleDir()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "fetch-libs: cannot resolve libs/ path:", err)
+		fmt.Fprintln(os.Stderr, "fetch-libs:", err)
 		os.Exit(1)
 	}
-	// When run via `go run`, os.Args[0] is a temp dir; fall back to CWD.
-	if _, err := os.Stat(filepath.Join(libsRoot, "..", "go.mod")); err != nil {
-		cwd, _ := os.Getwd()
-		libsRoot = filepath.Join(cwd, "libs")
-	}
-
+	libsRoot := filepath.Join(modDir, "libs")
 	target := filepath.Join(libsRoot, dir)
+
 	asset := assetName(dir)
 	url := fmt.Sprintf("%s/%s/%s", base, tag, asset)
 
 	fmt.Printf("fetch-libs: %s/%s -> %s\n", goos, goarch, url)
+	fmt.Printf("fetch-libs: target = %s\n", target)
 
 	if _, err := os.Stat(filepath.Join(target, "lib")); err == nil {
 		fmt.Printf("fetch-libs: libs/%s already present, skipping (delete it to re-fetch)\n", dir)
@@ -115,17 +131,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The module cache is typically read-only; make libs/ writable.
 	if err := os.MkdirAll(libsRoot, 0o755); err != nil {
-		fmt.Fprintln(os.Stderr, "fetch-libs: mkdir libs failed:", err)
-		os.Exit(1)
+		// Try chmod the parent and retry.
+		_ = exec.Command("chmod", "-R", "u+w", modDir).Run()
+		if err2 := os.MkdirAll(libsRoot, 0o755); err2 != nil {
+			fmt.Fprintln(os.Stderr, "fetch-libs: mkdir libs failed:", err2)
+			os.Exit(1)
+		}
 	}
+	_ = exec.Command("chmod", "-R", "u+w", libsRoot).Run()
 
 	if err := extractTarGz(resp.Body, libsRoot); err != nil {
 		fmt.Fprintln(os.Stderr, "fetch-libs: extract failed:", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("fetch-libs: extracted to libs/%s\n", dir)
+	fmt.Printf("fetch-libs: extracted to %s\n", target)
 }
 
 func extractTarGz(r io.Reader, dest string) error {
@@ -153,7 +175,7 @@ func extractTarGz(r io.Reader, dest string) error {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755)
 			if err != nil {
 				return err
 			}

@@ -33,15 +33,15 @@ go get github.com/mmngadi/fyne-av
 Because `fyne-av` statically links FFmpeg via cgo, `go get` only fetches the Go source — the prebuilt FFmpeg archives are **not** in the module. After `go get`, fetch the static libraries for your target platform:
 
 ```bash
-go generate github.com/mmngadi/fyne-av
+go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 ```
 
-This downloads the correct FFmpeg `.a` archives from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page into `libs/` for the host platform. For cross-compiling (e.g. Android), set `GOOS`/`GOARCH` first:
+This downloads the correct FFmpeg `.a` archives from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page into the module's `libs/` directory so cgo can find them at build time. For cross-compiling (e.g. Android), set `GOOS`/`GOARCH` first:
 
 ```bash
-GOOS=android GOARCH=arm64 go generate github.com/mmngadi/fyne-av
-GOOS=android GOARCH=amd64 go generate github.com/mmngadi/fyne-av
-GOOS=windows GOARCH=amd64 go generate github.com/mmngadi/fyne-av
+GOOS=android GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+GOOS=android GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+GOOS=windows GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 ```
 
 If you prefer to build FFmpeg from source yourself (e.g. to customize decoders), see [BUILD.md](BUILD.md).
