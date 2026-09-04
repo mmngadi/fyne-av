@@ -24,29 +24,45 @@ A lightweight, cross-platform audio and video library for [Fyne](https://fyne.io
 
 > **Help Wanted:** I don't have a macOS device to compile FFmpeg static libraries for macOS and iOS. If you have a Mac and can contribute the FFmpeg build scripts (see [BUILD.md](BUILD.md) → "macOS / iOS") and test on those platforms, please open a PR or issue.
 
-## Install
+---
+
+## Quick Start: Linux Desktop
+
+### 1. Create a Fyne app
+
+```bash
+mkdir my-player && cd my-player
+go mod init my-player
+```
+
+### 2. Add fyne-av as a dependency
 
 ```bash
 go get github.com/mmngadi/fyne-av
+go get fyne.io/fyne/v2
 ```
 
-Because `fyne-av` statically links FFmpeg via cgo, `go get` only fetches the Go source — the prebuilt FFmpeg archives are **not** in the module. After `go get`, fetch the static libraries for your target platform:
+### 3. Install the fetch-libs tool
+
+`go get` fetches the Go source, but the prebuilt FFmpeg `.a` archives are too large to ship in the module. Install the `fetch-libs` helper once:
 
 ```bash
-go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+go install github.com/mmngadi/fyne-av/cmd/fetch-libs@latest
 ```
 
-This downloads the correct FFmpeg `.a` archives from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page into the module's `libs/` directory so cgo can find them at build time. For cross-compiling (e.g. Android), set `FYNE_AV_TARGET_GOOS`/`FYNE_AV_TARGET_GOARCH` (not `GOOS`/`GOARCH`, which would cross-compile the fetcher itself):
+This puts a `fetch-libs` binary in your `$GOPATH/bin` (make sure it's on your `PATH`).
+
+### 4. Download FFmpeg static libraries
 
 ```bash
-FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
-FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
-FYNE_AV_TARGET_GOOS=windows FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+fetch-libs
 ```
 
-If you prefer to build FFmpeg from source yourself (e.g. to customize decoders), see [BUILD.md](BUILD.md).
+This downloads the FFmpeg `.a` archives for your host platform from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page into the module cache, where cgo can find them at build time.
 
-## Quick Start
+### 5. Write your app
+
+Create `main.go`:
 
 ```go
 package main
@@ -74,6 +90,202 @@ func main() {
 	ctrl.Close()
 }
 ```
+
+### 6. Build and run
+
+```bash
+CGO_ENABLED=1 go build -o my-player .
+./my-player
+```
+
+That's it — FFmpeg is statically linked into your binary. No system FFmpeg required.
+
+---
+
+## Quick Start: Android (emulator or device)
+
+### 1. Prerequisites
+
+- Android NDK (tested with r27d)
+- `ANDROID_NDK_HOME` set to your NDK path:
+  ```bash
+  export ANDROID_NDK_HOME=$HOME/android/ndk/android-ndk-r27d
+  ```
+- Fyne CLI:
+  ```bash
+  go install fyne.io/fyne/v2/cmd/fyne@latest
+  ```
+- An Android emulator running (or a physical device connected via `adb`)
+
+### 2. Create a Fyne app
+
+```bash
+mkdir my-player && cd my-player
+go mod init my-player
+go get github.com/mmngadi/fyne-av
+go get fyne.io/fyne/v2
+```
+
+### 3. Install the fetch-libs tool
+
+```bash
+go install github.com/mmngadi/fyne-av/cmd/fetch-libs@latest
+```
+
+### 4. Download FFmpeg static libraries for Android
+
+For the emulator (x86_64):
+```bash
+fetch-libs -os android -arch amd64
+```
+
+For a physical device (arm64):
+```bash
+fetch-libs -os android -arch arm64
+```
+
+> **Note:** `fetch-libs` always runs on your host machine. Use `-os` and `-arch` flags to select the target platform — do not set `GOOS`/`GOARCH` (that would cross-compile the tool itself).
+
+### 5. Write your app
+
+On Android, the Fyne file picker returns `content://` URIs that FFmpeg cannot open directly. You must copy picked files to a local path first:
+
+```go
+package main
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"time"
+
+	av "github.com/mmngadi/fyne-av"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
+)
+
+func main() {
+	a := app.New()
+	w := a.NewWindow("Video Player")
+	w.Resize(fyne.NewSize(800, 600))
+
+	player := av.NewVideoPlayer(nil)
+	playBtn := widget.NewButton("Open File", nil)
+
+	playBtn.OnTapped = func() {
+		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
+
+			// Copy to a real filesystem path (Android content:// URIs
+			// can't be opened by FFmpeg directly).
+			dest := filepath.Join(os.TempDir(), "media_"+time.Now().Format("150405")+".mp4")
+			out, err := os.Create(dest)
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			io.Copy(out, reader)
+			out.Close()
+
+			ctrl, err := av.NewController(dest, av.WithMode(av.ModeAuto))
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			player.SetController(ctrl)
+			ctrl.Play()
+		}, w)
+	}
+
+	w.SetContent(container.NewBorder(nil, playBtn, nil, nil, player))
+	w.ShowAndRun()
+}
+```
+
+### 6. Build the APK
+
+```bash
+fyne package -os android/amd64 -appID com.example.myplayer
+```
+
+### 7. Install and run
+
+```bash
+adb install my-player.apk
+adb shell am start -n com.example.myplayer/org.golang.app.GoNativeActivity
+```
+
+---
+
+## Quick Start: Windows (cross-compile from Linux)
+
+### 1. Install MinGW-w64
+
+```bash
+# Fedora / RHEL
+sudo dnf install -y mingw64-gcc nasm
+
+# Debian / Ubuntu
+sudo apt install -y mingw-w64 nasm
+```
+
+### 2. Download Windows FFmpeg libraries
+
+```bash
+fetch-libs -os windows -arch amd64
+```
+
+### 3. Build
+
+```bash
+CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
+  CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+  go build -o my-player.exe .
+```
+
+For a fully static `.exe` (no runtime DLL dependency), add `CGO_LDFLAGS=-static`.
+
+---
+
+## fetch-libs Reference
+
+The `fetch-libs` tool downloads prebuilt FFmpeg static archives from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page.
+
+```bash
+# Install once
+go install github.com/mmngadi/fyne-av/cmd/fetch-libs@latest
+
+# Download for host platform
+fetch-libs
+
+# Download for a specific target
+fetch-libs -os android -arch arm64
+fetch-libs -os android -arch amd64
+fetch-libs -os windows -arch amd64
+fetch-libs -os linux -arch amd64
+```
+
+**Flags:**
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-os` | host OS | Target OS (`linux`, `android`, `windows`) |
+| `-arch` | host arch | Target arch (`amd64`, `arm64`) |
+
+**Env vars:**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FYNE_AV_LIBS_TAG` | `v0.3.0` | Release tag to download from |
+| `FYNE_AV_LIBS_BASE` | `https://github.com/mmngadi/fyne-av/releases/download` | Base URL for downloads |
+
+If you prefer to build FFmpeg from source yourself (e.g. to customize decoders), see [BUILD.md](BUILD.md).
+
+---
 
 ## Usage Guide
 
@@ -284,7 +496,6 @@ Functional option for configuring a Controller at creation time.
 
 ```go
 func NewController(src string, opts ...Option) (*Controller, error)
-
 ```
 
 Opens a media file at `src` (filesystem path) and returns a Controller configured by `opts`. Returns an error if the file cannot be opened or no decodable streams are found.
@@ -293,7 +504,6 @@ Opens a media file at `src` (filesystem path) and returns a Controller configure
 
 ```go
 func NewVideoPlayer(ctrl *Controller) *VideoPlayer
-
 ```
 
 Creates a VideoPlayer widget bound to the given Controller. If `ctrl` is nil, creates an empty player (use `SetController` to bind later).
@@ -304,7 +514,6 @@ Creates a VideoPlayer widget bound to the given Controller. If `ctrl` is nil, cr
 
 ```go
 func WithMode(m Mode) Option
-
 ```
 
 Sets the stream decoding mode. Default: `ModeAuto`.
@@ -313,7 +522,6 @@ Sets the stream decoding mode. Default: `ModeAuto`.
 
 ```go
 func WithLoop(loop bool) Option
-
 ```
 
 Enables or disables looping playback (restart on EOF). Default: `false`.
@@ -322,7 +530,6 @@ Enables or disables looping playback (restart on EOF). Default: `false`.
 
 ```go
 func WithVolume(v float64) Option
-
 ```
 
 Sets the initial software volume. Range: 0.0 (silent) to 1.0 (full). Default: 1.0.
@@ -331,7 +538,6 @@ Sets the initial software volume. Range: 0.0 (silent) to 1.0 (full). Default: 1.
 
 ```go
 func WithMuted(m bool) Option
-
 ```
 
 Sets the initial mute state. Default: `false`.
@@ -340,7 +546,6 @@ Sets the initial mute state. Default: `false`.
 
 ```go
 func WithOnEOF(fn func()) Option
-
 ```
 
 Sets a callback invoked when playback reaches end-of-file (non-loop mode). Not called in loop mode.
@@ -349,7 +554,6 @@ Sets a callback invoked when playback reaches end-of-file (non-loop mode). Not c
 
 ```go
 func WithOnStateChange(fn func(State)) Option
-
 ```
 
 Sets a callback invoked on each state transition (`StatePlaying`, `StatePaused`, `StateStopped`).
@@ -360,7 +564,6 @@ Sets a callback invoked on each state transition (`StatePlaying`, `StatePaused`,
 
 ```go
 func (c *Controller) Play()
-
 ```
 
 Starts or resumes playback. If resuming from pause, continues from the current position. If starting from stopped, begins from the beginning.
@@ -369,7 +572,6 @@ Starts or resumes playback. If resuming from pause, continues from the current p
 
 ```go
 func (c *Controller) Pause()
-
 ```
 
 Suspends playback. The position is retained; call `Play()` to resume.
@@ -378,7 +580,6 @@ Suspends playback. The position is retained; call `Play()` to resume.
 
 ```go
 func (c *Controller) Stop()
-
 ```
 
 Stops playback, resets position to the beginning, and stops all decode goroutines. Call `Play()` to start again from the beginning.
@@ -387,7 +588,6 @@ Stops playback, resets position to the beginning, and stops all decode goroutine
 
 ```go
 func (c *Controller) Seek(target time.Duration) error
-
 ```
 
 Seeks to the target position. Playback continues if it was playing, or stays paused if paused.
@@ -396,7 +596,6 @@ Seeks to the target position. Playback continues if it was playing, or stays pau
 
 ```go
 func (c *Controller) Forward(d time.Duration) error
-
 ```
 
 Seeks forward by `d` from the current position.
@@ -405,7 +604,6 @@ Seeks forward by `d` from the current position.
 
 ```go
 func (c *Controller) Rewind(d time.Duration) error
-
 ```
 
 Seeks backward by `d` from the current position.
@@ -414,7 +612,6 @@ Seeks backward by `d` from the current position.
 
 ```go
 func (c *Controller) SetLoop(loop bool)
-
 ```
 
 Enables or disables looping at runtime.
@@ -423,7 +620,6 @@ Enables or disables looping at runtime.
 
 ```go
 func (c *Controller) Loop() bool
-
 ```
 
 Returns the current loop setting.
@@ -432,7 +628,6 @@ Returns the current loop setting.
 
 ```go
 func (c *Controller) SetVolume(v float64)
-
 ```
 
 Sets the software volume. Range: 0.0 to 1.0. Applied to PCM audio samples in Go — does not touch the OS master volume.
@@ -441,7 +636,6 @@ Sets the software volume. Range: 0.0 to 1.0. Applied to PCM audio samples in Go 
 
 ```go
 func (c *Controller) Volume() float64
-
 ```
 
 Returns the current volume (0.0 to 1.0).
@@ -450,7 +644,6 @@ Returns the current volume (0.0 to 1.0).
 
 ```go
 func (c *Controller) SetMuted(m bool)
-
 ```
 
 Mutes or unmutes audio output.
@@ -459,7 +652,6 @@ Mutes or unmutes audio output.
 
 ```go
 func (c *Controller) Muted() bool
-
 ```
 
 Returns the current mute state.
@@ -468,7 +660,6 @@ Returns the current mute state.
 
 ```go
 func (c *Controller) State() State
-
 ```
 
 Returns the current playback state (`StateStopped`, `StatePlaying`, or `StatePaused`).
@@ -477,7 +668,6 @@ Returns the current playback state (`StateStopped`, `StatePlaying`, or `StatePau
 
 ```go
 func (c *Controller) Duration() time.Duration
-
 ```
 
 Returns the total media duration.
@@ -486,7 +676,6 @@ Returns the total media duration.
 
 ```go
 func (c *Controller) Position() int64
-
 ```
 
 Returns the current playback position in milliseconds. When audio is playing, this is derived from the audio hardware clock (exact). Otherwise, reflects the last displayed frame's PTS.
@@ -495,7 +684,6 @@ Returns the current playback position in milliseconds. When audio is playing, th
 
 ```go
 func (c *Controller) HasVideo() bool
-
 ```
 
 Returns true if the media has a video stream being decoded.
@@ -504,7 +692,6 @@ Returns true if the media has a video stream being decoded.
 
 ```go
 func (c *Controller) HasAudio() bool
-
 ```
 
 Returns true if the media has an audio stream being decoded.
@@ -513,7 +700,6 @@ Returns true if the media has an audio stream being decoded.
 
 ```go
 func (c *Controller) Close() error
-
 ```
 
 Releases all resources (FFmpeg context, audio device, goroutines). Must be called when the Controller is no longer needed. Safe to call multiple times.
@@ -524,7 +710,6 @@ Releases all resources (FFmpeg context, audio device, goroutines). Must be calle
 
 ```go
 func (vp *VideoPlayer) SetController(ctrl *Controller)
-
 ```
 
 Binds a new Controller to the player. Replaces any previous binding.
@@ -533,7 +718,6 @@ Binds a new Controller to the player. Replaces any previous binding.
 
 ```go
 func (vp *VideoPlayer) SetAspectRatio(r AspectRatio)
-
 ```
 
 Sets the aspect ratio the video area enforces. The video is letterboxed (centered with black bars) within the available space to preserve the ratio. Use `AspectAuto` to derive from the decoded frame.
@@ -542,7 +726,6 @@ Sets the aspect ratio the video area enforces. The video is letterboxed (centere
 
 ```go
 func (vp *VideoPlayer) AspectRatio() AspectRatio
-
 ```
 
 Returns the currently effective aspect ratio. When set to `AspectAuto` and a frame has been received, returns the frame's ratio.
@@ -555,7 +738,6 @@ These are used by `VideoPlayer` internally but are also available for developers
 
 ```go
 func (c *Controller) FrameSignal() <-chan struct{}
-
 ```
 
 Returns a channel that receives a signal each time a new video frame is ready to display.
@@ -564,7 +746,6 @@ Returns a channel that receives a signal each time a new video frame is ready to
 
 ```go
 func (c *Controller) VideoFrame() (frame.Video, bool)
-
 ```
 
 Returns the latest video frame from the internal queue (non-blocking). Returns `false` if no frame is available.

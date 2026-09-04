@@ -1,18 +1,18 @@
-// Command fetch-libs downloads the prebuilt FFmpeg static archives for the
-// current target platform (GOOS/GOARCH) from the fyne-av GitHub Releases and
-// extracts them into the fyne-av module's libs/ directory (inside the Go
-// module cache) so that cgo's ${SRCDIR} references resolve at build time.
+// Command fetch-libs downloads the prebuilt FFmpeg static archives for a
+// target platform from the fyne-av GitHub Releases and extracts them into
+// the fyne-av module's libs/ directory (inside the Go module cache) so that
+// cgo's ${SRCDIR} references resolve at build time.
 //
-// Usage (from your app's module root, after `go get`):
+// Install:
 //
-//	go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	go install github.com/mmngadi/fyne-av/cmd/fetch-libs@latest
 //
-// For cross-compiling, set FYNE_AV_TARGET_GOOS/FYNE_AV_TARGET_GOARCH
-// (not GOOS/GOARCH, which would cross-compile the fetcher itself):
+// Usage:
 //
-//	FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
-//	FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
-//	FYNE_AV_TARGET_GOOS=windows FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	fetch-libs                           # host platform
+//	fetch-libs -os android -arch arm64   # physical device
+//	fetch-libs -os android -arch amd64   # emulator
+//	fetch-libs -os windows -arch amd64   # cross-compile from Linux
 //
 // Override the release tag with FYNE_AV_LIBS_TAG (default: v0.3.0) and the
 // base URL with FYNE_AV_LIBS_BASE (default:
@@ -22,6 +22,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,6 +82,10 @@ func moduleDir() (string, error) {
 }
 
 func main() {
+	targetOS := flag.String("os", "", "target OS (linux, android, windows); defaults to host")
+	targetArch := flag.String("arch", "", "target arch (amd64, arm64); defaults to host")
+	flag.Parse()
+
 	tag := os.Getenv("FYNE_AV_LIBS_TAG")
 	if tag == "" {
 		tag = "v0.3.0"
@@ -90,17 +95,11 @@ func main() {
 		base = "https://github.com/mmngadi/fyne-av/releases/download"
 	}
 
-	goos := os.Getenv("FYNE_AV_TARGET_GOOS")
-	if goos == "" {
-		goos = os.Getenv("GOOS")
-	}
+	goos := *targetOS
 	if goos == "" {
 		goos = runtime.GOOS
 	}
-	goarch := os.Getenv("FYNE_AV_TARGET_GOARCH")
-	if goarch == "" {
-		goarch = os.Getenv("GOARCH")
-	}
+	goarch := *targetArch
 	if goarch == "" {
 		goarch = runtime.GOARCH
 	}
@@ -143,7 +142,6 @@ func main() {
 
 	// The module cache is typically read-only; make libs/ writable.
 	if err := os.MkdirAll(libsRoot, 0o755); err != nil {
-		// Try chmod the parent and retry.
 		_ = exec.Command("chmod", "-R", "u+w", modDir).Run()
 		if err2 := os.MkdirAll(libsRoot, 0o755); err2 != nil {
 			fmt.Fprintln(os.Stderr, "fetch-libs: mkdir libs failed:", err2)

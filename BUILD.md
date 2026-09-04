@@ -139,10 +139,14 @@ CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
 
 ## Producing GitHub Release Assets
 
-After running `build-all.sh`, upload the tarballs in `dist/` to a new GitHub Release whose tag matches the `fyne-av` version (e.g. `v0.1.0`). The fetch-libs command downloads from that release by default. To override the version/URL:
+After running `build-all.sh`, upload the tarballs in `dist/` to a new GitHub Release whose tag matches the `fyne-av` version. The `fetch-libs` tool downloads from that release by default. To override the version/URL:
 
 ```bash
-FYNE_AV_LIBS_TAG=v0.3.0 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+# Install the tool
+go install github.com/mmngadi/fyne-av/cmd/fetch-libs@latest
+
+# Override which release to download from
+FYNE_AV_LIBS_TAG=v0.3.0 fetch-libs
 ```
 
 ## License Notes

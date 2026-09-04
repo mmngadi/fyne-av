@@ -1,12 +1,13 @@
 package av
 
 // Prebuilt FFmpeg static libraries are not included in the Go module.
-// After `go get`, download them for your target platform:
+// After `go get`, install the fetch-libs tool and run it:
 //
-//	go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	go install github.com/mmngadi/fyne-av/cmd/fetch-libs@latest
+//	fetch-libs
 //
-// For cross-compiling, set GOOS/GOARCH first:
+// For cross-compiling, use -os and -arch flags:
 //
-//	GOOS=android GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	fetch-libs -os android -arch arm64
 //
-//go:generate go run ./cmd/fetch-libs
+//go:generate fetch-libs
