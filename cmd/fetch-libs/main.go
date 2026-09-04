@@ -7,11 +7,14 @@
 //
 //	go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 //
-// For cross-compiling, set GOOS/GOARCH first:
+// For cross-compiling, set FYNE_AV_TARGET_GOOS/FYNE_AV_TARGET_GOARCH
+// (not GOOS/GOARCH, which would cross-compile the fetcher itself):
 //
-//	GOOS=android GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+//	FYNE_AV_TARGET_GOOS=windows FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 //
-// Override the release tag with FYNE_AV_LIBS_TAG (default: v0.1.0) and the
+// Override the release tag with FYNE_AV_LIBS_TAG (default: v0.3.0) and the
 // base URL with FYNE_AV_LIBS_BASE (default:
 // https://github.com/mmngadi/fyne-av/releases/download).
 package main
@@ -87,11 +90,17 @@ func main() {
 		base = "https://github.com/mmngadi/fyne-av/releases/download"
 	}
 
-	goos := os.Getenv("GOOS")
+	goos := os.Getenv("FYNE_AV_TARGET_GOOS")
+	if goos == "" {
+		goos = os.Getenv("GOOS")
+	}
 	if goos == "" {
 		goos = runtime.GOOS
 	}
-	goarch := os.Getenv("GOARCH")
+	goarch := os.Getenv("FYNE_AV_TARGET_GOARCH")
+	if goarch == "" {
+		goarch = os.Getenv("GOARCH")
+	}
 	if goarch == "" {
 		goarch = runtime.GOARCH
 	}

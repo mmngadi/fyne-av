@@ -36,12 +36,12 @@ Because `fyne-av` statically links FFmpeg via cgo, `go get` only fetches the Go 
 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 ```
 
-This downloads the correct FFmpeg `.a` archives from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page into the module's `libs/` directory so cgo can find them at build time. For cross-compiling (e.g. Android), set `GOOS`/`GOARCH` first:
+This downloads the correct FFmpeg `.a` archives from the [GitHub Releases](https://github.com/mmngadi/fyne-av/releases) page into the module's `libs/` directory so cgo can find them at build time. For cross-compiling (e.g. Android), set `FYNE_AV_TARGET_GOOS`/`FYNE_AV_TARGET_GOARCH` (not `GOOS`/`GOARCH`, which would cross-compile the fetcher itself):
 
 ```bash
-GOOS=android GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
-GOOS=android GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
-GOOS=windows GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=arm64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+FYNE_AV_TARGET_GOOS=android FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
+FYNE_AV_TARGET_GOOS=windows FYNE_AV_TARGET_GOARCH=amd64 go run github.com/mmngadi/fyne-av/cmd/fetch-libs
 ```
 
 If you prefer to build FFmpeg from source yourself (e.g. to customize decoders), see [BUILD.md](BUILD.md).
