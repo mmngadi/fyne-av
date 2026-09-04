@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // platformDir maps (GOOS, GOARCH) to the directory name used inside the
@@ -69,7 +70,7 @@ func moduleDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("go list failed: %w (is github.com/mmngadi/fyne-av in your go.mod?)", err)
 	}
-	dir := filepath.Clean(string(out))
+	dir := strings.TrimSpace(string(out))
 	if dir == "" || dir == "github.com/mmngadi/fyne-av" {
 		return "", fmt.Errorf("could not resolve fyne-av module dir; ensure it is in go.mod and run `go mod download` first")
 	}
