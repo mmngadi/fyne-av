@@ -88,7 +88,7 @@ func main() {
 
 	tag := os.Getenv("FYNE_AV_LIBS_TAG")
 	if tag == "" {
-		tag = "v0.3.0"
+		tag = "v0.3.2"
 	}
 	base := os.Getenv("FYNE_AV_LIBS_BASE")
 	if base == "" {
